@@ -6,10 +6,13 @@ const INITIAL_TIMETABLE = {
   金曜日: []
 };
 
+const BELONGING_CATALOG = ["教科書", "ノート", "ワーク", "筆箱", "タブレット", "充電器", "体操服", "体育館シューズ", "楽器", "絵の具セット"];
+
 const DAYS = Object.keys(INITIAL_TIMETABLE);
 const STORAGE_KEY = "classroom-timetable";
 const SUBMISSIONS_KEY = "classroom-submissions";
 const CALENDAR_EVENTS_KEY = "classroom-calendar-events";
+const BELONGINGS_KEY = "classroom-belongings";
 const CREDENTIALS = {
   teacher: { username: "sensei", password: "1234", label: "先生モード" },
   student: { username: "student", password: "5678", label: "生徒モード" }
@@ -18,6 +21,7 @@ const CREDENTIALS = {
 let timetable = loadTimetable();
 let submissions = loadSubmissions();
 let calendarEvents = loadCalendarEvents();
+let belongings = loadBelongings();
 let currentRole = null;
 let selectedCalendarDate = null;
 const currentDate = new Date();
@@ -37,7 +41,8 @@ const viewTitles = {
   calendar: ["カレンダー", "予定を確認できます。"],
   submissions: ["提出物", "提出物の状況を確認できます。"],
   timetable: ["今週の時間割", "授業の流れを、すっきり確認できます。"],
-  events: ["イベント", "学校行事を確認できます。"]
+  events: ["イベント", "学校行事を確認できます。"],
+  belongings: ["持ち物チェック", "今日必要な持ち物を写真で確認できます。"]
 };
 
 function cloneTimetable(source) {
@@ -83,6 +88,14 @@ function loadCalendarEvents() {
 
 function saveCalendarEvents() {
   localStorage.setItem(CALENDAR_EVENTS_KEY, JSON.stringify(calendarEvents));
+}
+
+function loadBelongings() {
+  try { return JSON.parse(localStorage.getItem(BELONGINGS_KEY)) || []; } catch { return []; }
+}
+
+function saveBelongings() {
+  localStorage.setItem(BELONGINGS_KEY, JSON.stringify(belongings));
 }
 
 function escapeHtml(value) {
@@ -157,6 +170,7 @@ function showDashboard(role) {
   renderCalendar();
   renderSubmissions();
   renderDeadlineAlert();
+  renderBelongings();
   switchView("calendar");
 }
 
@@ -172,6 +186,7 @@ function switchView(viewName) {
   document.querySelector("#dashboard-subtitle").textContent = viewTitles[viewName][1];
   document.querySelectorAll(".teacher-only").forEach((element) => element.classList.toggle("hidden", currentRole !== "teacher" || viewName !== "timetable"));
   if (viewName === "calendar") renderCalendar();
+  if (viewName === "belongings") renderBelongings();
   closeMenu();
 }
 
@@ -281,6 +296,92 @@ function renderDeadlineAlert() {
     const label = daysUntilDue === 0 ? "今日まで" : daysUntilDue === 1 ? "明日まで" : `${daysUntilDue}日後まで`;
     return `<button class="deadline-item" type="button" data-deadline-submission-id="${submission.id}"><span>${escapeHtml(submission.title)}</span><strong>${label}</strong></button>`;
   }).join("")}</div>`;
+}
+
+function getTodaySubjects() {
+  const dayNames = ["日曜日", "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日"];
+  return timetable[dayNames[new Date().getDay()]] || [];
+}
+
+function getTodayBelongings() {
+  const subjects = getTodaySubjects().filter(Boolean);
+  return belongings.filter((item) => subjects.some((subject) => subject.includes(item.subject) || item.subject.includes(subject)));
+}
+
+function renderBelongings() {
+  const subjects = getTodaySubjects().filter(Boolean);
+  const todayItems = getTodayBelongings();
+  const todayKey = getLocalDateKey();
+  renderBelongingOptions();
+  document.querySelector("#belongings-date").textContent = new Intl.DateTimeFormat("ja-JP", { month: "long", day: "numeric", weekday: "short" }).format(new Date());
+  document.querySelector("#today-subjects").innerHTML = subjects.length ? subjects.map((subject) => `<span>${escapeHtml(subject)}</span>`).join("") : "<span>授業なし</span>";
+  document.querySelector("#belongings-progress").textContent = `${todayItems.filter((item) => item.checkedDate === todayKey).length} / ${todayItems.length} 確認済み`;
+  document.querySelector("#today-belongings").innerHTML = todayItems.length ? todayItems.map((item) => `<label class="belonging-item ${item.checkedDate === todayKey ? "checked" : ""}"><input type="checkbox" data-belonging-id="${item.id}" ${item.checkedDate === todayKey ? "checked" : ""}><span class="belonging-check">✓</span><span class="belonging-item-main"><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.subject)}${item.photo ? " / 写真登録済み" : " / 写真未登録"}</small></span>${item.photo ? `<img src="${item.photo}" alt="${escapeHtml(item.name)}の登録写真">` : ""}</label>`).join("") : '<div class="empty-view belonging-empty"><span class="empty-icon">□</span><p>今日の時間割に対応する持ち物がありません。先生モードで登録できます。</p></div>';
+  document.querySelector("#belonging-database").innerHTML = belongings.length ? belongings.map((item) => `<div class="database-item">${item.photo ? `<img src="${item.photo}" alt="">` : '<span class="database-image-empty">□</span>'}<div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.subject)}</small></div><button type="button" data-delete-belonging-id="${item.id}" aria-label="${escapeHtml(item.name)}を削除">削除</button></div>`).join("") : '<p class="empty-message">登録された持ち物はありません。</p>';
+}
+
+function renderBelongingOptions() {
+  const subjectSelect = document.querySelector("#belonging-subject");
+  const nameSelect = document.querySelector("#belonging-name");
+  const subjects = [...new Set(Object.values(timetable).flat().filter(Boolean))];
+  const selectedSubject = subjectSelect.value;
+  const selectedName = nameSelect.value;
+  subjectSelect.innerHTML = '<option value="">教科を選択</option>' + subjects.map((subject) => `<option value="${escapeHtml(subject)}">${escapeHtml(subject)}</option>`).join("");
+  nameSelect.innerHTML = '<option value="">持ち物を選択</option>' + BELONGING_CATALOG.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("");
+  if (subjects.includes(selectedSubject)) subjectSelect.value = selectedSubject;
+  if (BELONGING_CATALOG.includes(selectedName)) nameSelect.value = selectedName;
+}
+
+function resizeImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const image = new Image();
+      image.onload = () => {
+        const scale = Math.min(1, 480 / Math.max(image.naturalWidth, image.naturalHeight));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+        canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", .78));
+      };
+      image.onerror = reject;
+      image.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function imageSignature(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 16;
+      canvas.height = 16;
+      const context = canvas.getContext("2d");
+      context.drawImage(image, 0, 0, 16, 16);
+      resolve(Array.from(context.getImageData(0, 0, 16, 16).data));
+    };
+    image.onerror = reject;
+    image.src = dataUrl;
+  });
+}
+
+function compareSignatures(first, second) {
+  if (!first || !second || first.length !== second.length) return 0;
+  let difference = 0;
+  for (let index = 0; index < first.length; index += 4) {
+    difference += (Math.abs(first[index] - second[index]) + Math.abs(first[index + 1] - second[index + 1]) + Math.abs(first[index + 2] - second[index + 2])) / 3;
+  }
+  return Math.max(0, 1 - difference / (255 * (first.length / 4)));
+}
+
+function renderPhotoResults(results, hasPhoto) {
+  const container = document.querySelector("#photo-results");
+  if (!hasPhoto) { container.innerHTML = ""; return; }
+  container.innerHTML = results.length ? `${results[0].score >= .72 ? `<div class="photo-verdict"><span>自動判定</span><strong>${escapeHtml(results[0].item.name)}</strong><small>先生が登録した基準写真と最も一致しています</small></div>` : '<div class="photo-verdict uncertain-verdict"><span>自動判定</span><strong>判別できませんでした</strong><small>写真を明るく撮り直すか、一覧を目視で確認してください</small></div>'}<p class="photo-result-heading">今日の持ち物との照合</p>${results.map(({ item, score }) => `<div class="photo-result ${score >= .72 ? "match" : "uncertain"}"><span class="result-icon">${score >= .72 ? "✓" : "?"}</span><div><strong>${escapeHtml(item.name)}</strong><small>${score >= .72 ? "写真の特徴が近い持ち物です" : "一致度が低いので目視で確認してください"}</small></div><b>${Math.round(score * 100)}%</b></div>`).join("")}` : '<p class="empty-message">今日の持ち物に登録写真がありません。先に先生モードで基準写真を登録してください。</p>';
 }
 
 function renderSubmissionDetail(submissionId) {
@@ -410,6 +511,71 @@ document.querySelector("#submission-list").addEventListener("change", (event) =>
   renderSubmissions();
   renderDeadlineAlert();
   showNotice(submission.completed ? "提出済みにしました" : "未提出に戻しました");
+});
+
+document.querySelector("#today-belongings").addEventListener("change", (event) => {
+  const checkbox = event.target.closest("input[data-belonging-id]");
+  if (!checkbox) return;
+  const item = belongings.find((belonging) => String(belonging.id) === checkbox.dataset.belongingId);
+  if (!item) return;
+  item.checkedDate = checkbox.checked ? getLocalDateKey() : "";
+  saveBelongings();
+  renderBelongings();
+});
+
+document.querySelector("#belonging-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const file = document.querySelector("#belonging-photo").files[0];
+  if (!file) return;
+  try {
+    const photo = await resizeImage(file);
+    belongings.unshift({ id: Date.now(), name: document.querySelector("#belonging-name").value.trim(), subject: document.querySelector("#belonging-subject").value.trim(), photo, signature: await imageSignature(photo), checkedDate: "" });
+    saveBelongings();
+    event.target.reset();
+    renderBelongings();
+    showNotice("持ち物と基準写真を登録しました");
+  } catch {
+    showNotice("写真を読み込めませんでした");
+  }
+});
+
+document.querySelector("#belonging-database").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-delete-belonging-id]");
+  if (!button || !window.confirm("この持ち物を削除しますか？")) return;
+  belongings = belongings.filter((item) => String(item.id) !== button.dataset.deleteBelongingId);
+  saveBelongings();
+  renderBelongings();
+  showNotice("持ち物を削除しました");
+});
+
+document.querySelector("#photo-check-button").addEventListener("click", () => {
+  document.querySelector("#photo-check-panel").classList.toggle("hidden");
+});
+
+document.querySelector("#check-photo-input").addEventListener("change", async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  const preview = document.querySelector("#photo-preview");
+  const previewImage = document.querySelector("#check-photo-preview");
+  const status = document.querySelector("#photo-check-status");
+  preview.classList.remove("hidden");
+  status.textContent = "写真を照合中...";
+  try {
+    const photo = await resizeImage(file);
+    previewImage.src = photo;
+    const signature = await imageSignature(photo);
+    const results = getTodayBelongings().filter((item) => item.signature).map((item) => ({ item, score: compareSignatures(signature, item.signature) })).sort((first, second) => second.score - first.score);
+    renderPhotoResults(results, true);
+    if (results[0] && results[0].score >= .72) {
+      results[0].item.checkedDate = getLocalDateKey();
+      saveBelongings();
+      renderBelongings();
+    }
+    status.textContent = "照合完了。最終確認は写真を見て行ってください。";
+  } catch {
+    status.textContent = "写真を読み込めませんでした。";
+    renderPhotoResults([], false);
+  }
 });
 
 loginForm.addEventListener("submit", (event) => {

@@ -51,6 +51,7 @@
             <p class="menu-title">MENU</p>
             <button class="menu-item view-menu-item active" type="button" data-view="calendar"><span aria-hidden="true">▦</span> カレンダー</button>
             <button class="menu-item view-menu-item" type="button" data-view="submissions"><span aria-hidden="true">□</span> 提出物</button>
+            <button class="menu-item view-menu-item" type="button" data-view="belongings"><span aria-hidden="true">▣</span> 持ち物</button>
             <button class="menu-item view-menu-item" type="button" data-view="timetable"><span aria-hidden="true">▤</span> 時間割</button>
             <button class="menu-item view-menu-item" type="button" data-view="events"><span aria-hidden="true">✦</span> イベント</button>
             <div class="menu-divider"></div>
@@ -82,6 +83,32 @@
             <button type="submit"><span aria-hidden="true">＋</span> 追加する</button>
           </form>
           <div id="submission-list" class="submission-list"></div>
+        </div>
+        <div id="belongings-view" class="app-view hidden">
+          <div class="belongings-layout">
+            <section class="belongings-card today-belongings-card">
+              <div class="belongings-heading"><div><p class="card-kicker">TODAY'S KIT</p><h2>今日の持ち物</h2><p id="belongings-date" class="belongings-meta"></p></div><span id="belongings-progress" class="submission-count"></span></div>
+              <div id="today-subjects" class="subject-tags"></div>
+              <div id="today-belongings" class="belongings-list"></div>
+              <button id="photo-check-button" class="photo-check-button" type="button"><span aria-hidden="true">◎</span> 写真で忘れ物チェック</button>
+            </section>
+            <section class="belongings-card photo-check-card hidden" id="photo-check-panel">
+              <div><p class="card-kicker">PHOTO CHECK</p><h2>写真を送って確認</h2><p class="belongings-help">登録済みの持ち物写真と照合します。明るく、対象が見える写真を使ってください。</p></div>
+              <label class="photo-upload"><span>カメラで撮影 / 写真を選択</span><input id="check-photo-input" type="file" accept="image/*" capture="environment"></label>
+              <div id="photo-preview" class="photo-preview hidden"><img id="check-photo-preview" alt="確認する写真のプレビュー"><span id="photo-check-status"></span></div>
+              <div id="photo-results" class="photo-results"></div>
+            </section>
+          </div>
+          <section class="belongings-card teacher-belongings-card teacher-only">
+            <div class="belongings-heading"><div><p class="card-kicker">ITEM DATABASE</p><h2>持ち物を写真で登録</h2></div><span class="belongings-meta">この端末に保存</span></div>
+            <form id="belonging-form" class="belonging-form">
+              <label><span>持ち物名</span><select id="belonging-name" required></select></label>
+              <label><span>関連教科</span><select id="belonging-subject" required></select></label>
+              <label class="belonging-photo-field"><span>基準写真</span><input id="belonging-photo" type="file" accept="image/*" capture="environment" required></label>
+              <button type="submit">写真を登録 <span aria-hidden="true">＋</span></button>
+            </form>
+            <div id="belonging-database" class="belonging-database"></div>
+          </section>
         </div>
         <div id="timetable-view" class="app-view hidden"><div class="schedule-wrap"><table id="timetable" class="timetable"><thead></thead><tbody></tbody></table></div><div class="bottom-row"><p id="table-caption" class="table-caption"></p><p class="save-status"><span class="status-dot"></span><span id="save-status-text">ブラウザに自動保存</span></p></div></div>
         <div id="events-view" class="app-view hidden"><div class="empty-view"><span class="empty-icon">✦</span><h2>イベント</h2><p>学校イベントはまだ登録されていません。</p></div>
