@@ -45,6 +45,7 @@
       <header class="topbar">
         <a class="brand" href="#" aria-label="トップへ戻る"><span class="brand-mark small">T</span><span>CLASSROOM</span></a>
         <div class="topbar-actions">
+          <label class="class-selector"><span class="sr-only">学年とクラス</span><select id="class-selector" aria-label="学年とクラス"></select></label>
           <span id="role-badge" class="role-badge"></span>
           <button id="menu-button" class="menu-button" type="button" aria-label="メニューを開く" aria-expanded="false" aria-controls="action-menu"><span></span><span></span><span></span></button>
           <nav id="action-menu" class="action-menu" aria-label="操作メニュー">
@@ -111,7 +112,16 @@
           </section>
         </div>
         <div id="timetable-view" class="app-view hidden"><div class="schedule-wrap"><table id="timetable" class="timetable"><thead></thead><tbody></tbody></table></div><div class="bottom-row"><p id="table-caption" class="table-caption"></p><p class="save-status"><span class="status-dot"></span><span id="save-status-text">ブラウザに自動保存</span></p></div></div>
-        <div id="events-view" class="app-view hidden"><div class="empty-view"><span class="empty-icon">✦</span><h2>イベント</h2><p>学校イベントはまだ登録されていません。</p></div>
+        <div id="events-view" class="app-view hidden">
+          <div class="events-toolbar"><div><p class="card-kicker">SCHOOL CALENDAR</p><h2>イベント一覧</h2></div><span id="event-count" class="submission-count">0件</span></div>
+          <form id="events-form" class="events-form">
+            <label class="events-field events-title-field"><span>イベント名</span><input id="event-title" type="text" placeholder="例：文化祭" required></label>
+            <label class="events-field"><span>開始日</span><input id="event-date-start" type="date" required></label>
+            <label class="events-field"><span>終了日</span><input id="event-date-end" type="date"></label>
+            <label class="events-field events-members-field"><span>メンバー</span><input id="event-members" type="text" placeholder="例：田中、佐藤"></label>
+            <button type="submit"><span aria-hidden="true">＋</span> 追加する</button>
+          </form>
+          <div id="event-list" class="event-list"></div>
         </div>
       </div>
     </section>

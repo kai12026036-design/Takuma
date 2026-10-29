@@ -13,11 +13,13 @@ const STORAGE_KEY = "classroom-timetable";
 const SUBMISSIONS_KEY = "classroom-submissions";
 const CALENDAR_EVENTS_KEY = "classroom-calendar-events";
 const BELONGINGS_KEY = "classroom-belongings";
+const CLASS_SELECTION_KEY = "classroom-selected-class";
 const CREDENTIALS = {
   teacher: { username: "sensei", password: "1234", label: "先生モード" },
   student: { username: "student", password: "5678", label: "生徒モード" }
 };
 
+let selectedClass = loadSelectedClass();
 let timetable = loadTimetable();
 let submissions = loadSubmissions();
 let calendarEvents = loadCalendarEvents();
@@ -36,7 +38,16 @@ const table = document.querySelector("#timetable");
 const notice = document.querySelector("#notice");
 const menuButton = document.querySelector("#menu-button");
 const actionMenu = document.querySelector("#action-menu");
+const classSelector = document.querySelector("#class-selector");
 const viewButtons = document.querySelectorAll(".view-menu-item");
+const classOptions = [];
+for (let grade = 1; grade <= 3; grade += 1) {
+  for (let classNumber = 1; classNumber <= 6; classNumber += 1) {
+    classOptions.push(`<option value="${grade}-${classNumber}">${grade}年${classNumber}組</option>`);
+  }
+}
+classSelector.innerHTML = classOptions.join("");
+classSelector.value = selectedClass;
 const viewTitles = {
   calendar: ["カレンダー", "予定を確認できます。"],
   submissions: ["提出物", "提出物の状況を確認できます。"],
@@ -49,9 +60,27 @@ function cloneTimetable(source) {
   return Object.fromEntries(Object.entries(source).map(([day, subjects]) => [day, [...subjects]]));
 }
 
+function loadSelectedClass() {
+  try {
+    const saved = localStorage.getItem(CLASS_SELECTION_KEY);
+    return /^[1-3]-[1-6]$/.test(saved || "") ? saved : "1-1";
+  } catch {
+    return "1-1";
+  }
+}
+
+function getClassStorageKey(key) {
+  const scopedKey = `${key}:${selectedClass}`;
+  if (selectedClass === "1-1" && localStorage.getItem(scopedKey) === null) {
+    const legacyValue = localStorage.getItem(key);
+    if (legacyValue !== null) localStorage.setItem(scopedKey, legacyValue);
+  }
+  return scopedKey;
+}
+
 function loadTimetable() {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = localStorage.getItem(getClassStorageKey(STORAGE_KEY));
     return saved ? { ...cloneTimetable(INITIAL_TIMETABLE), ...JSON.parse(saved) } : cloneTimetable(INITIAL_TIMETABLE);
   } catch {
     return cloneTimetable(INITIAL_TIMETABLE);
@@ -60,14 +89,14 @@ function loadTimetable() {
 
 function loadSubmissions() {
   try {
-    return JSON.parse(localStorage.getItem(SUBMISSIONS_KEY)) || [];
+    return JSON.parse(localStorage.getItem(getClassStorageKey(SUBMISSIONS_KEY))) || [];
   } catch {
     return [];
   }
 }
 
 function saveSubmissions() {
-  localStorage.setItem(SUBMISSIONS_KEY, JSON.stringify(submissions));
+  localStorage.setItem(getClassStorageKey(SUBMISSIONS_KEY), JSON.stringify(submissions));
 }
 
 function getLocalDateKey(date = new Date()) {
@@ -79,7 +108,7 @@ function getLocalDateKey(date = new Date()) {
 
 function loadCalendarEvents() {
   try {
-    const saved = JSON.parse(localStorage.getItem(CALENDAR_EVENTS_KEY)) || {};
+    const saved = JSON.parse(localStorage.getItem(getClassStorageKey(CALENDAR_EVENTS_KEY))) || {};
       return Object.fromEntries(Object.entries(saved).map(([date, event]) => [date, typeof event === "string" ? { title: event, startTime: "", endTime: "", members: "", color: "#e9664d", rangeStart: date, rangeEnd: date } : { title: event.title || "", startTime: event.startTime || "", endTime: event.endTime || "", members: event.members || "", color: normalizeColor(event.color), rangeStart: event.rangeStart || date, rangeEnd: event.rangeEnd || date }]));
   } catch {
     return {};
@@ -87,15 +116,15 @@ function loadCalendarEvents() {
 }
 
 function saveCalendarEvents() {
-  localStorage.setItem(CALENDAR_EVENTS_KEY, JSON.stringify(calendarEvents));
+  localStorage.setItem(getClassStorageKey(CALENDAR_EVENTS_KEY), JSON.stringify(calendarEvents));
 }
 
 function loadBelongings() {
-  try { return JSON.parse(localStorage.getItem(BELONGINGS_KEY)) || []; } catch { return []; }
+  try { return JSON.parse(localStorage.getItem(getClassStorageKey(BELONGINGS_KEY))) || []; } catch { return []; }
 }
 
 function saveBelongings() {
-  localStorage.setItem(BELONGINGS_KEY, JSON.stringify(belongings));
+  localStorage.setItem(getClassStorageKey(BELONGINGS_KEY), JSON.stringify(belongings));
 }
 
 function escapeHtml(value) {
@@ -136,7 +165,7 @@ function getDateKeys(startDate, endDate) {
 }
 
 function saveTimetable(statusText = "たった今、自動保存") {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(timetable));
+  localStorage.setItem(getClassStorageKey(STORAGE_KEY), JSON.stringify(timetable));
   document.querySelector("#save-status-text").textContent = statusText;
 }
 
@@ -144,17 +173,32 @@ function getMaxPeriods() {
   return Math.max(...DAYS.map((day) => timetable[day].length), 7);
 }
 
+function getSubjectClass(subject) {
+  if (/数学|算数|^数/.test(subject)) return "subject-math";
+  if (/英語|英コミ|論表|英文|英会話/i.test(subject)) return "subject-english";
+  if (/国語|現国|言文|古典|漢文/.test(subject)) return "subject-japanese";
+  if (/理科|科学|化学|生物|物理|地学/.test(subject)) return "subject-science";
+  if (/歴史|地理|公共|政治|経済|社会/.test(subject)) return "subject-social";
+  if (/体育|保健/.test(subject)) return "subject-pe";
+  if (/音楽|美術|芸術/.test(subject)) return "subject-arts";
+  if (/情報|技術/.test(subject)) return "subject-technology";
+  return "subject-other";
+}
+
 function renderTimetable() {
   const maxPeriods = getMaxPeriods();
+  const todayIndex = (currentDate.getDay() + 6) % 7;
   table.querySelector("thead").innerHTML = `<tr><th scope="col">曜日</th>${Array.from({ length: maxPeriods }, (_, index) => `<th scope="col">${index + 1}限</th>`).join("")}</tr>`;
   table.querySelector("tbody").innerHTML = DAYS.map((day, dayIndex) => {
+    const isToday = dayIndex === todayIndex;
     const cells = Array.from({ length: maxPeriods }, (_, periodIndex) => {
       const subject = timetable[day][periodIndex] || "";
+      const subjectClass = subject ? ` ${getSubjectClass(subject)}` : "";
       const emptyClass = subject ? "" : " empty";
       const editableClass = currentRole === "teacher" ? " editable" : "";
-      return `<td class="${emptyClass}${editableClass}" data-day="${day}" data-period="${periodIndex}" tabindex="${currentRole === "teacher" ? "0" : "-1"}">${subject || "—"}</td>`;
+      return `<td class="${subjectClass}${emptyClass}${editableClass}" data-day="${day}" data-period="${periodIndex}" tabindex="${currentRole === "teacher" ? "0" : "-1"}">${subject || "—"}</td>`;
     }).join("");
-    return `<tr><th scope="row">${day}<small>DAY 0${dayIndex + 1}</small></th>${cells}</tr>`;
+    return `<tr class="${isToday ? "today-row" : ""}"><th scope="row">${day}<small>DAY 0${dayIndex + 1}${isToday ? " · 今日" : ""}</small></th>${cells}</tr>`;
   }).join("");
   document.querySelector("#table-caption").textContent = `${DAYS.length}日間 / ${maxPeriods}時限まで表示`;
 }
@@ -186,6 +230,7 @@ function switchView(viewName) {
   document.querySelector("#dashboard-subtitle").textContent = viewTitles[viewName][1];
   document.querySelectorAll(".teacher-only").forEach((element) => element.classList.toggle("hidden", currentRole !== "teacher" || viewName !== "timetable"));
   if (viewName === "calendar") renderCalendar();
+  if (viewName === "events") renderEvents();
   if (viewName === "belongings") renderBelongings();
   closeMenu();
 }
@@ -261,6 +306,16 @@ function renderCalendarEvents() {
   const todayKey = getLocalDateKey();
   const events = Object.entries(calendarEvents).filter(([date]) => date === todayKey);
   eventContainer.innerHTML = events.length ? events.map(([date, event]) => `<button class="calendar-event" type="button" data-date="${date}"><time>${formatPeriod(event)}</time><strong>${escapeHtml(event.title)}</strong></button>`).join("") : '<p class="empty-message">今日の予定はありません。</p>';
+}
+
+function renderEvents() {
+  const eventList = document.querySelector("#event-list");
+  const events = Object.entries(calendarEvents)
+    .filter(([date, event]) => date === (event.rangeStart || date))
+    .map(([date, event]) => ({ date, ...event }))
+    .sort((first, second) => first.date.localeCompare(second.date));
+  document.querySelector("#event-count").textContent = `${events.length}件`;
+  eventList.innerHTML = events.length ? events.map((event) => `<article class="event-item" style="--event-color: ${normalizeColor(event.color)}"><div class="event-date"><strong>${escapeHtml(formatDateRange(event))}</strong><time>${formatPeriod(event)}</time></div><div class="event-item-content"><h3>${escapeHtml(event.title)}</h3><p>メンバー: ${escapeHtml(event.members || "未設定")}</p></div></article>`).join("") : '<div class="empty-view"><span class="empty-icon">✦</span><p>イベントはまだありません。上のフォームから追加できます。</p></div>';
 }
 
 function renderSubmissions() {
@@ -423,6 +478,23 @@ viewButtons.forEach((button) => {
   button.addEventListener("click", () => switchView(button.dataset.view));
 });
 
+classSelector.addEventListener("change", () => {
+  selectedClass = classSelector.value;
+  localStorage.setItem(CLASS_SELECTION_KEY, selectedClass);
+  timetable = loadTimetable();
+  submissions = loadSubmissions();
+  calendarEvents = loadCalendarEvents();
+  belongings = loadBelongings();
+  selectedCalendarDate = null;
+  renderTimetable();
+  renderCalendar();
+  renderSubmissions();
+  renderDeadlineAlert();
+  renderEvents();
+  renderBelongings();
+  showNotice(`${selectedClass.replace("-", "年")}組に切り替えました`);
+});
+
 document.querySelector("#calendar-grid").addEventListener("click", (event) => {
   const dateButton = event.target.closest("[data-date]");
   if (!dateButton) return;
@@ -476,6 +548,35 @@ document.querySelector("#calendar-event-form").addEventListener("submit", (event
   saveCalendarEvents();
   renderCalendar();
   showNotice("予定を保存しました");
+});
+
+document.querySelector("#events-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const title = document.querySelector("#event-title").value.trim();
+  const rangeStart = document.querySelector("#event-date-start").value;
+  const rangeEnd = document.querySelector("#event-date-end").value || rangeStart;
+  if (!title || !rangeStart) return;
+  if (rangeStart > rangeEnd) {
+    showNotice("終了日は開始日以降にしてください");
+    return;
+  }
+  if (getDateKeys(rangeStart, rangeEnd).some((date) => calendarEvents[date])) {
+    showNotice("期間内にすでに予定がある日があります");
+    return;
+  }
+  const eventData = {
+    title,
+    members: document.querySelector("#event-members").value.trim(),
+    color: "#e9664d",
+    rangeStart,
+    rangeEnd
+  };
+  getDateKeys(rangeStart, rangeEnd).forEach((date) => { calendarEvents[date] = { ...eventData }; });
+  saveCalendarEvents();
+  event.target.reset();
+  renderCalendar();
+  renderEvents();
+  showNotice("イベントを追加しました");
 });
 
 document.querySelector("#previous-month").addEventListener("click", () => {
